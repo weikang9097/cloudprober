@@ -17,6 +17,7 @@ package metrics
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,7 +52,9 @@ type EventMetrics struct {
 	labels     map[string]string
 	labelsKeys []string
 
-	LatencyUnit time.Duration
+	LatencyUnit        time.Duration
+	Response           *http.Response
+	FailValidatorNames []string
 }
 
 // NewEventMetrics return a new EventMetrics object with internals maps initialized.

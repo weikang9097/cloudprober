@@ -100,6 +100,9 @@ type probeResult struct {
 	respCodes                *metrics.Map
 	respBodies               *metrics.Map
 	validationFailure        *metrics.Map
+	respCode                 int
+	response                 *http.Response
+	failValidatorNames       []string
 }
 
 func (p *Probe) updateOauthToken() {
@@ -304,7 +307,6 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		p.l.Warning("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: ", err.Error())
 		return
 	}
-
 	p.l.Debug("Target:", targetName, ", URL:", req.URL.String(), ", response: ", string(respBody))
 
 	// Calling Body.Close() allows the TCP connection to be reused.
@@ -313,7 +315,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 
 	if p.opts.Validators != nil {
 		failedValidations := validators.RunValidators(p.opts.Validators, &validators.Input{Response: resp, ResponseBody: respBody}, result.validationFailure, p.l)
-
+		result.failValidatorNames = failedValidations
 		// If any validation failed, return now, leaving the success and latency
 		// counters unchanged.
 		if len(failedValidations) > 0 {
@@ -387,7 +389,8 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 		AddLabel("ptype", "http").
 		AddLabel("probe", p.name).
 		AddLabel("dst", targetName)
-
+	em.FailValidatorNames = result.failValidatorNames
+	em.Response = result.response
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}
