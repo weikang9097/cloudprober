@@ -227,7 +227,6 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	// Clients are safe for concurrent use by multiple goroutines.
 	p.client = &http.Client{
 		Transport: transport,
-		Timeout: p.opts.Timeout,
 	}
 
 	p.statsExportFrequency = p.opts.StatsExportInterval.Nanoseconds() / p.opts.Interval.Nanoseconds()
@@ -286,6 +285,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	resp, err := p.client.Do(req)
 	latency := time.Since(start)
     result.respLatency = int(latency.Milliseconds())
+    result.response = resp
 	if resultMu != nil {
 		// Note that we take lock on result object outside of the actual request.
 		resultMu.Lock()
