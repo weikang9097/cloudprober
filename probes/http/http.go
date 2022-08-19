@@ -227,6 +227,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	// Clients are safe for concurrent use by multiple goroutines.
 	p.client = &http.Client{
 		Transport: transport,
+		Timeout: p.opts.Timeout,
 	}
 
 	p.statsExportFrequency = p.opts.StatsExportInterval.Nanoseconds() / p.opts.Interval.Nanoseconds()
