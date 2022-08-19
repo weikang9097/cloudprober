@@ -191,7 +191,7 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 // expects the input to be of the type: *http.Response. Note that it doesn't
 // use the string input, it's part of the function signature to satisfy
 // Validator interface.
-func (v *Validator) Validate(input interface{}, unused []byte) (bool, error) {
+func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool, error) {
 	res, ok := input.(*nethttp.Response)
 	if !ok {
 		return false, fmt.Errorf("input %v is not of type http.Response", input)
@@ -208,7 +208,6 @@ func (v *Validator) Validate(input interface{}, unused []byte) (bool, error) {
 			return false, nil
 		}
 	}
-
 	if v.c.GetSuccessStatusCodes() != "" {
 		if !lookupStatusCode(res.StatusCode, v.successStatusCodeRanges) {
 			return false, nil
@@ -220,6 +219,10 @@ func (v *Validator) Validate(input interface{}, unused []byte) (bool, error) {
 			return false, nil
 		}
 	}
-
+	if respLatency:= v.c.GetLatency();respLatency!=0{
+		if respLatency>latency{
+			return false,nil
+		}
+	}
 	return true, nil
 }

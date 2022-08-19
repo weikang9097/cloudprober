@@ -15,7 +15,6 @@ message Validator {
   // Comma-separated list of failure status codes and code ranges. If HTTP
   // status code matches failure_status_codes, validator fails.
   optional string failure_status_codes = 2;
-
   message Header {
     // Header name to look for
     optional string name = 1;
@@ -39,4 +38,7 @@ message Validator {
   // Failure Header:
   //   If HTTP response headers match failure_header, validation fails.
   optional Header failure_header = 4;
+
+  optional int latency = 5;
+
 }

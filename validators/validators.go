@@ -69,7 +69,7 @@ func initValidator(validatorConf *configpb.Validator, l *logger.Logger) (validat
 			return nil, err
 		}
 		validator.Validate = func(input *Input) (bool, error) {
-			return v.Validate(input.Response, input.ResponseBody)
+			return v.Validate(input.Response, input.Latency,input.ResponseBody)
 		}
 		return
 
@@ -102,6 +102,7 @@ func initValidator(validatorConf *configpb.Validator, l *logger.Logger) (validat
 type Input struct {
 	Response     interface{}
 	ResponseBody []byte
+	Latency int
 }
 
 // RunValidators runs the list of validators on the given response and

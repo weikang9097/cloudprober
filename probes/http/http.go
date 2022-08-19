@@ -102,6 +102,7 @@ type probeResult struct {
 	validationFailure        *metrics.Map
 	respCode                 int
 	response                 *http.Response
+	respLatency              int
 	failValidatorNames       []string
 }
 
@@ -283,7 +284,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	start := time.Now()
 	resp, err := p.client.Do(req)
 	latency := time.Since(start)
-
+    result.respLatency = int(latency.Milliseconds())
 	if resultMu != nil {
 		// Note that we take lock on result object outside of the actual request.
 		resultMu.Lock()
@@ -391,6 +392,7 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 		AddLabel("dst", targetName)
 	em.FailValidatorNames = result.failValidatorNames
 	em.Response = result.response
+	em.Latency = result.respLatency
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}

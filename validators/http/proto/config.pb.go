@@ -49,6 +49,7 @@ type Validator struct {
 	// Failure Header:
 	//   If HTTP response headers match failure_header, validation fails.
 	FailureHeader *Validator_Header `protobuf:"bytes,4,opt,name=failure_header,json=failureHeader" json:"failure_header,omitempty"`
+	latency int
 }
 
 func (x *Validator) Reset() {
@@ -90,6 +91,12 @@ func (x *Validator) GetSuccessStatusCodes() string {
 	return ""
 }
 
+func (x *Validator) GetLatency() int {
+	if x != nil  {
+		return x.latency
+	}
+	return 0
+}
 func (x *Validator) GetFailureStatusCodes() string {
 	if x != nil && x.FailureStatusCodes != nil {
 		return *x.FailureStatusCodes
