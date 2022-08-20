@@ -104,6 +104,7 @@ type probeResult struct {
 	response                 *http.Response
 	respLatency              int
 	failValidatorNames       []string
+	responseBody   string
 }
 
 func (p *Probe) updateOauthToken() {
@@ -309,6 +310,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		p.l.Warning("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: ", err.Error())
 		return
 	}
+	result.responseBody = string(respBody)
 	p.l.Debug("Target:", targetName, ", URL:", req.URL.String(), ", response: ", string(respBody))
 
 	// Calling Body.Close() allows the TCP connection to be reused.
@@ -394,6 +396,7 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	em.FailValidatorNames = result.failValidatorNames
 	em.Response = result.response
 	em.Latency = result.respLatency
+	em.ResponseBody = result.responseBody
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}
