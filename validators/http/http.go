@@ -220,7 +220,7 @@ func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool
 		}
 	}
 	if respLatency:= v.c.GetLatency();respLatency!=0{
-		if respLatency>latency{
+		if respLatency<latency{
 			return false,nil
 		}
 	}
