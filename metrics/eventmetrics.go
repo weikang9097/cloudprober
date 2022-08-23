@@ -56,6 +56,7 @@ type EventMetrics struct {
 	Response           *http.Response
 	FailValidatorNames []string
 	Latency int
+	ResponseBody  string
 }
 
 // NewEventMetrics return a new EventMetrics object with internals maps initialized.
