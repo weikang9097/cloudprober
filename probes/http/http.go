@@ -318,7 +318,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	result.respCodes.IncKey(strconv.FormatInt(int64(resp.StatusCode), 10))
 
 	if p.opts.Validators != nil {
-		failedValidations := validators.RunValidators(p.opts.Validators, &validators.Input{Response: resp, ResponseBody: respBody}, result.validationFailure, p.l)
+		failedValidations := validators.RunValidators(p.opts.Validators, &validators.Input{Response: resp, ResponseBody: respBody,Latency: int(latency.Milliseconds())}, result.validationFailure, p.l)
 		result.failValidatorNames = failedValidations
 		// If any validation failed, return now, leaving the success and latency
 		// counters unchanged.
