@@ -150,7 +150,14 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	}
 
 	p.requestBody = []byte(p.c.GetBody())
-
+	var resolver *net.Resolver
+    if opts.DnsServer!=""{
+    	resolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			address = opts.DnsServer
+			return d.DialContext(ctx, network, address)
+		}}
+	}
 	// Create a transport for our use. This is mostly based on
 	// http.DefaultTransport with some timeouts changed.
 	// TODO(manugarg): Considering cloning DefaultTransport once
@@ -158,6 +165,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	dialer := &net.Dialer{
 		Timeout:   p.opts.Timeout,
 		KeepAlive: 30 * time.Second, // TCP keep-alive
+		Resolver: resolver,
 	}
 
 	if p.opts.SourceIP != nil {

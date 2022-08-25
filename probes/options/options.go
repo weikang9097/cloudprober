@@ -47,6 +47,7 @@ type Options struct {
 	StatsExportInterval time.Duration
 	LogMetrics          func(*metrics.EventMetrics)
 	AdditionalLabels    []*AdditionalLabel
+	DnsServer string
 }
 
 const defaultStatsExtportIntv = 10 * time.Second
