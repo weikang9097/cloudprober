@@ -105,6 +105,10 @@ type probeResult struct {
 	respLatency              int
 	failValidatorNames       []string
 	responseBody   string
+	tlsHandshakeElapsed int64
+	dnsElapsed int64
+	connectElapsed int64
+	firstByteElapsed int64
 }
 
 func (p *Probe) updateOauthToken() {
@@ -275,25 +279,43 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		req = req.Clone(req.Context())
 		req.Body = ioutil.NopCloser(bytes.NewReader(p.requestBody))
 	}
-
+	var start, connect, dns, tlsHandshake time.Time
+	var  dnsElapsed,connectElapsed,firstBytesElapsed,tlsHandshakeElapsed int64
 	if p.c.GetKeepAlive() {
 		trace := &httptrace.ClientTrace{
+			DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
+			DNSDone: func(ddi httptrace.DNSDoneInfo) {
+				dnsElapsed =  time.Since(dns).Milliseconds()
+			},
+			ConnectStart: func(network, addr string) { connect = time.Now() },
 			ConnectDone: func(_, addr string, err error) {
 				result.connEvent++
+				connectElapsed = time.Since(connect).Milliseconds()
 				if err != nil {
 					p.l.Warning("Error establishing a new connection to: ", addr, ". Err: ", err.Error())
 					return
 				}
 				p.l.Info("Established a new connection to: ", addr)
 			},
+			GotFirstResponseByte: func() {
+				firstBytesElapsed = time.Since(start).Milliseconds()
+			},
+			TLSHandshakeStart: func() { tlsHandshake = time.Now() },
+			TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
+				tlsHandshakeElapsed = time.Since(tlsHandshake).Milliseconds()
+			},
 		}
 		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	}
 
-	start := time.Now()
+	start = time.Now()
 	resp, err := p.client.Do(req)
 	latency := time.Since(start)
     result.respLatency = int(latency.Milliseconds())
+    result.firstByteElapsed = firstBytesElapsed
+    result.connectElapsed = connectElapsed
+    result.dnsElapsed = dnsElapsed
+    result.tlsHandshakeElapsed = tlsHandshakeElapsed
     result.response = resp
 	if resultMu != nil {
 		// Note that we take lock on result object outside of the actual request.
@@ -397,6 +419,10 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 		AddMetric("success", metrics.NewInt(result.success)).
 		AddMetric(p.opts.LatencyMetricName, result.latency).
 		AddMetric("timeouts", metrics.NewInt(result.timeouts)).
+		AddMetric("dns_elapsed",metrics.NewInt(result.dnsElapsed)).
+		AddMetric("connect_elapsed",metrics.NewInt(result.connectElapsed)).
+		AddMetric("tls_elapsed",metrics.NewInt(result.tlsHandshakeElapsed)).
+		AddMetric("first_byte_elapsed",metrics.NewInt(result.firstByteElapsed)).
 		AddMetric("resp-code", result.respCodes).
 		AddLabel("ptype", "http").
 		AddLabel("probe", p.name).

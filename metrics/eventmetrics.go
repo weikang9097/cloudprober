@@ -57,6 +57,8 @@ type EventMetrics struct {
 	FailValidatorNames []string
 	Latency int
 	ResponseBody  string
+
+
 }
 
 // NewEventMetrics return a new EventMetrics object with internals maps initialized.
@@ -81,6 +83,7 @@ func (em *EventMetrics) AddMetric(name string, val Value) *EventMetrics {
 	defer em.mu.Unlock()
 
 	if _, ok := em.metrics[name]; ok {
+		em.metrics[name] = val
 		// TODO(manugarg): We should probably log such cases. We'll have to
 		// plumb logger for that.
 		return em
