@@ -109,6 +109,10 @@ type probeResult struct {
 	dnsElapsed int64
 	connectElapsed int64
 	firstByteElapsed int64
+	ValidatorSuccess bool
+	ValidatorFail bool
+	TimeOutOrError bool
+
 }
 
 func (p *Probe) updateOauthToken() {
@@ -290,14 +294,11 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		trace := &httptrace.ClientTrace{
 			DNSStart: func(dsi httptrace.DNSStartInfo) {
 				dns = time.Now()
-				fmt.Println("开始dns")
 			},
 			DNSDone: func(ddi httptrace.DNSDoneInfo) {
 				dnsElapsed =  time.Since(dns).Milliseconds()
-				fmt.Println("dns耗时:",dnsElapsed)
 			},
 			ConnectStart: func(network, addr string) {
-				fmt.Println("开始建联")
 				connect = time.Now()
 			},
 			ConnectDone: func(_, addr string, err error) {
@@ -307,13 +308,10 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 					p.l.Warning("Error establishing a new connection to: ", addr, ". Err: ", err.Error())
 					return
 				}
-				fmt.Println("建连耗时:",connectElapsed)
 				p.l.Info("Established a new connection to: ", addr)
 			},
 			GotFirstResponseByte: func() {
 				firstBytesElapsed = time.Since(start).Milliseconds()
-				fmt.Println("首包耗时:",firstBytesElapsed)
-
 			},
 			TLSHandshakeStart: func() { tlsHandshake = time.Now() },
 			TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
@@ -341,6 +339,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	result.total++
 
 	if err != nil {
+		result.TimeOutOrError =true
 		if isClientTimeout(err) {
 			p.l.Warning("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: timeout error: ", err.Error())
 			result.timeouts++
@@ -368,9 +367,11 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		// If any validation failed, return now, leaving the success and latency
 		// counters unchanged.
 		if len(failedValidations) > 0 {
+			result.ValidatorFail = true
 			p.l.Debug("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: failed validations: ", strings.Join(failedValidations, ","))
 			return
 		}
+		result.ValidatorSuccess  = true
 	}
 
 	result.success++
@@ -450,7 +451,15 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}
-
+    if result.ValidatorSuccess{
+    	em.AddMetric("probe_status",metrics.NewString("validator_success"))
+	}
+	if result.ValidatorFail{
+        em.AddMetric("probe_status",metrics.NewString("validator_failed"))
+	}
+	if result.TimeOutOrError{
+		em.AddMetric("probe_status",metrics.NewString("connect_failed"))
+	}
 	if p.c.GetKeepAlive() {
 		em.AddMetric("connect_event", metrics.NewInt(result.connEvent))
 	}
