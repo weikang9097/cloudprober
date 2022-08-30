@@ -371,9 +371,8 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 			p.l.Debug("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: failed validations: ", strings.Join(failedValidations, ","))
 			return
 		}
-		result.ValidatorSuccess  = true
 	}
-
+	result.ValidatorSuccess  = true
 	result.success++
 	result.latency.AddFloat64(latency.Seconds() / p.opts.LatencyUnit.Seconds())
 	if result.respBodies != nil && len(respBody) <= maxResponseSizeForMetrics {
