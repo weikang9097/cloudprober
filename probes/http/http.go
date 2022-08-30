@@ -447,7 +447,6 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	em.Response = result.response
 	em.Latency = result.respLatency
 	em.ResponseBody = result.responseBody
-	fmt.Println("dns时间：", result.dnsElapsed,"建连时间",result.connectElapsed,time.Now())
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}
@@ -486,7 +485,6 @@ func (p *Probe) startForTarget(ctx context.Context, target endpoint.Endpoint, da
 	defer ticker.Stop()
 
 	for ts := time.Now(); true; ts = <-ticker.C{
-		fmt.Println("开始探测",time.Now())
 		// Don't run another probe if context is canceled already.
 		if ctxDone(ctx) {
 			return
@@ -497,14 +495,11 @@ func (p *Probe) startForTarget(ctx context.Context, target endpoint.Endpoint, da
 		// creation gets retried at a regular interval (stats export interval).
 		if req != nil {
 			p.runProbe(ctx, target, req, result)
-		}else {
-			fmt.Println("req is nil")
 		}
 
 		// Export stats if it's the time to do so.
 		runCnt++
 		if (runCnt % p.statsExportFrequency) == 0 {
-			fmt.Println("开始写入指标",time.Now())
 			p.exportMetrics(ts, result, target.Name, dataChan)
 
 			// If we are resolving first, this is also a good time to recreate HTTP
