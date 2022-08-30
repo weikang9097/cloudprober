@@ -183,6 +183,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 		DialContext:         dialer.DialContext,
 		MaxIdleConns:        256, // http.DefaultTransport.MaxIdleConns: 100.
 		TLSHandshakeTimeout: p.opts.Timeout,
+		IdleConnTimeout: 3*time.Second,
 	}
 
 	if p.c.GetProxyUrl() != "" {
@@ -238,10 +239,16 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	}
 
 	// Clients are safe for concurrent use by multiple goroutines.
+	var checkRedirectFunc func(req *http.Request, via []*http.Request) error
+	if opts.IgnoreRedirect{
+		checkRedirectFunc = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	p.client = &http.Client{
 		Transport: transport,
+		CheckRedirect: checkRedirectFunc,
 	}
-
 	p.statsExportFrequency = p.opts.StatsExportInterval.Nanoseconds() / p.opts.Interval.Nanoseconds()
 	if p.statsExportFrequency == 0 {
 		p.statsExportFrequency = 1
@@ -286,6 +293,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 			DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
 			DNSDone: func(ddi httptrace.DNSDoneInfo) {
 				dnsElapsed =  time.Since(dns).Milliseconds()
+				fmt.Println("dns耗时:",dnsElapsed)
 			},
 			ConnectStart: func(network, addr string) { connect = time.Now() },
 			ConnectDone: func(_, addr string, err error) {

@@ -48,6 +48,7 @@ type Options struct {
 	LogMetrics          func(*metrics.EventMetrics)
 	AdditionalLabels    []*AdditionalLabel
 	DnsServer string
+	IgnoreRedirect bool
 }
 
 const defaultStatsExtportIntv = 10 * time.Second
