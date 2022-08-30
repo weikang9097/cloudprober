@@ -181,7 +181,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		DialContext:         dialer.DialContext,
-		MaxIdleConns:        256, // http.DefaultTransport.MaxIdleConns: 100.
+		MaxIdleConns:        2, // http.DefaultTransport.MaxIdleConns: 100.
 		TLSHandshakeTimeout: p.opts.Timeout,
 		IdleConnTimeout: 3*time.Second,
 	}
