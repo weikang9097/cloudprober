@@ -451,13 +451,13 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 		em.AddMetric("resp-body", result.respBodies)
 	}
     if result.ValidatorSuccess{
-    	em.AddMetric("probe_status",metrics.NewString("validator_success"))
+    	em.AddMetric("probe_status",metrics.NewInt(0))
 	}
 	if result.ValidatorFail{
-        em.AddMetric("probe_status",metrics.NewString("validator_failed"))
+        em.AddMetric("probe_status",metrics.NewInt(1))
 	}
 	if result.TimeOutOrError{
-		em.AddMetric("probe_status",metrics.NewString("connect_failed"))
+		em.AddMetric("probe_status",metrics.NewInt(2))
 	}
 	if p.c.GetKeepAlive() {
 		em.AddMetric("connect_event", metrics.NewInt(result.connEvent))
