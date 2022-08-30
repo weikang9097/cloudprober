@@ -281,7 +281,7 @@ func isClientTimeout(err error) bool {
 
 // httpRequest executes an HTTP request and updates the provided result struct.
 func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *probeResult, resultMu *sync.Mutex) {
-
+    fmt.Println("进入doHTTPRequest方法")
 	if len(p.requestBody) >= largeBodyThreshold {
 		req = req.Clone(req.Context())
 		req.Body = ioutil.NopCloser(bytes.NewReader(p.requestBody))
@@ -372,6 +372,8 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	if result.respBodies != nil && len(respBody) <= maxResponseSizeForMetrics {
 		result.respBodies.IncKey(string(respBody))
 	}
+	fmt.Println("离开doHTTPRequest方法")
+
 }
 
 func (p *Probe) runProbe(ctx context.Context, target endpoint.Endpoint, req *http.Request, result *probeResult) {
@@ -490,6 +492,8 @@ func (p *Probe) startForTarget(ctx context.Context, target endpoint.Endpoint, da
 		// creation gets retried at a regular interval (stats export interval).
 		if req != nil {
 			p.runProbe(ctx, target, req, result)
+		}else {
+			fmt.Println("req is nil")
 		}
 
 		// Export stats if it's the time to do so.
