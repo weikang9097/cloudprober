@@ -281,7 +281,6 @@ func isClientTimeout(err error) bool {
 
 // httpRequest executes an HTTP request and updates the provided result struct.
 func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *probeResult, resultMu *sync.Mutex) {
-    fmt.Println("进入doHTTPRequest方法")
 	if len(p.requestBody) >= largeBodyThreshold {
 		req = req.Clone(req.Context())
 		req.Body = ioutil.NopCloser(bytes.NewReader(p.requestBody))
@@ -290,12 +289,18 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	var  dnsElapsed,connectElapsed,firstBytesElapsed,tlsHandshakeElapsed int64
 	if p.c.GetKeepAlive() {
 		trace := &httptrace.ClientTrace{
-			DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
+			DNSStart: func(dsi httptrace.DNSStartInfo) {
+				dns = time.Now()
+				fmt.Println("开始dns")
+			},
 			DNSDone: func(ddi httptrace.DNSDoneInfo) {
 				dnsElapsed =  time.Since(dns).Milliseconds()
 				fmt.Println("dns耗时:",dnsElapsed)
 			},
-			ConnectStart: func(network, addr string) { connect = time.Now() },
+			ConnectStart: func(network, addr string) {
+				fmt.Println("开始建联")
+				connect = time.Now()
+			},
 			ConnectDone: func(_, addr string, err error) {
 				result.connEvent++
 				connectElapsed = time.Since(connect).Milliseconds()
@@ -308,6 +313,8 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 			},
 			GotFirstResponseByte: func() {
 				firstBytesElapsed = time.Since(start).Milliseconds()
+				fmt.Println("首包耗时:",firstBytesElapsed)
+
 			},
 			TLSHandshakeStart: func() { tlsHandshake = time.Now() },
 			TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
@@ -372,7 +379,6 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	if result.respBodies != nil && len(respBody) <= maxResponseSizeForMetrics {
 		result.respBodies.IncKey(string(respBody))
 	}
-	fmt.Println("离开doHTTPRequest方法")
 
 }
 
