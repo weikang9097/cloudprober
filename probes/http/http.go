@@ -183,7 +183,6 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 		DialContext:         dialer.DialContext,
 		MaxIdleConns:        2, // http.DefaultTransport.MaxIdleConns: 100.
 		TLSHandshakeTimeout: p.opts.Timeout,
-		IdleConnTimeout: 3*time.Second,
 	}
 
 	if p.c.GetProxyUrl() != "" {
@@ -217,7 +216,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 		transport.DisableKeepAlives = true
 	} else {
 		// If it's been more than 2 probe intervals since connection was used, close it.
-		transport.IdleConnTimeout = 2 * p.opts.Interval
+		transport.IdleConnTimeout = 10 * time.Second
 		if p.c.GetRequestsPerProbe() > 1 {
 			transport.MaxIdleConnsPerHost = int(p.c.GetRequestsPerProbe())
 		}
