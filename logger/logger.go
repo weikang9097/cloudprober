@@ -38,7 +38,7 @@ var (
 	debugLogList = flag.String("debug_logname_regex", "", "Enable debug logs for only for log names that match this regex (e.g. --debug_logname_regex=.*probe1.*")
 
 	// Enable/Disable cloud logging
-	disableCloudLogging = flag.Bool("disable_cloud_logging", false, "Disable cloud logging.")
+	disableCloudLogging = flag.Bool("disable_cloud_logging", true, "Disable cloud logging.")
 
 	// LogPrefixEnvVar environment variable is used to determine the stackdriver
 	// log name prefix. Default prefix is "cloudprober".

@@ -369,7 +369,6 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		// counters unchanged.
 		if len(failedValidations) > 0 {
 			result.ValidatorFail = true
-			result.Reason = fmt.Sprintf(fmt.Sprintf("规则：%s,校验失败",strings.Join(failedValidations, ",")))
 			p.l.Debug("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: failed validations: ", strings.Join(failedValidations, ","))
 			return
 		}
@@ -457,11 +456,9 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	}
 	if result.ValidatorFail{
         em.AddMetric("probe_status",metrics.NewInt(1))
-        em.AddLabel("reason",result.Reason)
 	}
 	if result.TimeOutOrError{
 		em.AddMetric("probe_status",metrics.NewInt(2))
-		em.AddLabel("reason","请求超时或出错")
 	}
 	if p.c.GetKeepAlive() {
 		em.AddMetric("connect_event", metrics.NewInt(result.connEvent))
