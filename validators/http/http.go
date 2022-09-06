@@ -19,6 +19,7 @@ package http
 import (
 	"errors"
 	"fmt"
+	"github.com/google/cloudprober/validators"
 	nethttp "net/http"
 	"regexp"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/google/cloudprober/logger"
 	configpb "github.com/google/cloudprober/validators/http/proto"
+"github.com/xeipuuv/gojsonschema"
 )
 
 // Validator implements a validator for HTTP responses.
@@ -192,11 +194,11 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 // use the string input, it's part of the function signature to satisfy
 // Validator interface.
 func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool, error) {
-	res, ok := input.(*nethttp.Response)
+	in, ok := input.(*validators.Input)
 	if !ok {
 		return false, fmt.Errorf("input %v is not of type http.Response", input)
 	}
-
+	res := in.Response.(nethttp.Response)
 	if v.c.GetFailureStatusCodes() != "" {
 		if lookupStatusCode(res.StatusCode, v.failureStatusCodeRanges) {
 			return false, nil
@@ -223,6 +225,16 @@ func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool
 		if respLatency<latency{
 			return false,nil
 		}
+	}
+	if jsonBodySchema := v.c.GetJsonBodySchema();jsonBodySchema!=""{
+		schemaLoader := gojsonschema.NewStringLoader(jsonBodySchema)
+		data :=gojsonschema.NewStringLoader(string(in.ResponseBody))
+		if validate, err := gojsonschema.Validate(schemaLoader, data);err!=nil{
+			return false, err
+		}else if validate.Valid() {
+			return true,nil
+		}
+		return false,nil
 	}
 	return true, nil
 }
