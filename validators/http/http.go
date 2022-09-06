@@ -226,8 +226,8 @@ func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool
 			return false,nil
 		}
 	}
-	if jsonBodySchema := v.c.GetJsonBodySchema();jsonBodySchema!=""{
-		schemaLoader := gojsonschema.NewStringLoader(jsonBodySchema)
+	if jsonBodySchema := v.c.GetJsonBodySchema();jsonBodySchema!=nil{
+		schemaLoader := gojsonschema.NewStringLoader(*jsonBodySchema)
 		data :=gojsonschema.NewStringLoader(string(in.ResponseBody))
 		if validate, err := gojsonschema.Validate(schemaLoader, data);err!=nil{
 			return false, err
