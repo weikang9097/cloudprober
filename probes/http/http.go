@@ -453,12 +453,15 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	}
     if result.ValidatorSuccess{
     	em.AddMetric("probe_status",metrics.NewInt(0))
+    	result.ValidatorSuccess =false
 	}
 	if result.ValidatorFail{
         em.AddMetric("probe_status",metrics.NewInt(1))
+        result.ValidatorFail = false
 	}
 	if result.TimeOutOrError{
 		em.AddMetric("probe_status",metrics.NewInt(2))
+		result.TimeOutOrError = false
 	}
 	if p.c.GetKeepAlive() {
 		em.AddMetric("connect_event", metrics.NewInt(result.connEvent))
