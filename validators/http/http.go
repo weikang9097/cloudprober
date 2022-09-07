@@ -20,12 +20,13 @@ import (
 	"errors"
 	"fmt"
 	nethttp "net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/glenn-brown/golang-pkg-pcre/src/pkg/pcre"
 	"github.com/google/cloudprober/logger"
 	configpb "github.com/google/cloudprober/validators/http/proto"
+
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -36,8 +37,9 @@ type Validator struct {
 
 	successStatusCodeRanges []*numRange
 	failureStatusCodeRanges []*numRange
-	successHeaderRegexp     *regexp.Regexp
-	failureHeaderRegexp     *regexp.Regexp
+	successHeaderRegexp     *pcre.Regexp
+	failureHeaderRegexp     *pcre.Regexp
+	jsonBodyRegexp         *pcre.Regexp
 }
 
 type numRange struct {
@@ -113,7 +115,7 @@ func lookupStatusCode(statusCode int, statusCodeRanges []*numRange) bool {
 // lookupHTTPHeader looks up for the given header in the HTTP response. It
 // returns true on the first match. If valueRegex is omitted - check for header
 // existence only.
-func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp *regexp.Regexp) bool {
+func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp *pcre.Regexp) bool {
 	values, found := headers[expectedHeader]
 	if !found {
 		return false
@@ -125,7 +127,7 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 	}
 
 	for _, value := range values {
-		if valueRegexp.MatchString(value) {
+		if valueRegexp.MatcherString(value,0).Matches() {
 			return true
 		}
 	}
@@ -133,8 +135,19 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 	return false
 }
 
+
+func (v *Validator) initBodyValidators(c *configpb.Validator) error{
+
+	if c.GetBodyRegex()!=nil{
+		reg:= pcre.MustCompile(*c.GetBodyRegex(), 0)
+		v.jsonBodyRegexp = &reg
+	}
+	return nil
+
+
+}
 func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
-	parseHeader := func(h *configpb.Validator_Header) (*regexp.Regexp, error) {
+	parseHeader := func(h *configpb.Validator_Header) (*pcre.Regexp, error) {
 		if h == nil {
 			return nil, nil
 		}
@@ -144,7 +157,8 @@ func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
 		if h.GetValueRegex() == "" {
 			return nil, nil
 		}
-		return regexp.Compile(h.GetValueRegex())
+		compile := pcre.MustCompile(h.GetValueRegex(), 0)
+		return &compile,nil
 	}
 
 	var err error
@@ -184,7 +198,11 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 			return err
 		}
 	}
-
+	if c.GetBodyRegex()!=nil{
+		if err = v.initBodyValidators(c);err!=nil{
+			return err
+		}
+	}
 	return v.initHeaderValidators(c)
 }
 
@@ -223,6 +241,13 @@ func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool
 		if respLatency<latency{
 			return false,nil
 		}
+	}
+
+	if bodyRegex:= v.c.GetBodyRegex();bodyRegex!=nil{
+		if v.jsonBodyRegexp.MatcherString(string(unused),0).Matches(){
+			return true,nil
+		}
+		return false,nil
 	}
 	if jsonBodySchema := v.c.GetJsonBodySchema();jsonBodySchema!=nil{
 		schemaLoader := gojsonschema.NewStringLoader(*jsonBodySchema)

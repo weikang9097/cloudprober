@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go/logging v1.4.2
 	cloud.google.com/go/pubsub v1.8.1
 	github.com/aws/aws-sdk-go v1.35.7
+	github.com/glenn-brown/golang-pkg-pcre v0.0.0-20120522223659-48bb82a8b8ce
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.5.2
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510

@@ -50,6 +50,7 @@ type Validator struct {
 	//   If HTTP response headers match failure_header, validation fails.
 	FailureHeader *Validator_Header `protobuf:"bytes,4,opt,name=failure_header,json=failureHeader" json:"failure_header,omitempty"`
 	SuccessJsonBodySchema *Validator_JsonPath `json:"successJsonBodySchema"`
+	BodyRegex *string `json:"bodyRegex"` 
 	Latency int `json:"latency"`
 }
 
@@ -99,7 +100,12 @@ func (x *Validator) GetLatency() int {
 	return 0
 }
 
-
+func (x *Validator) GetBodyRegex() *string {
+	if x != nil  {
+		return x.BodyRegex
+	}
+	return nil
+}
 func (x *Validator) GetJsonBodySchema() *string {
 	if x != nil  {
 		return x.SuccessJsonBodySchema.ValueRegex
@@ -145,9 +151,9 @@ type Validator_JsonPath struct {
 	unknownFields protoimpl.UnknownFields
 
 	// json path
-	JsonPath *string `protobuf:"bytes,1,opt,name=jsonPath" json:"jsonPath,omitempty"`
+	JsonPath *string `protobuf:"bytes,1,opt,name=jsonPath" json:"name,omitempty",bson:"jsonPath"`
 	// Header value to match. If omited - check for header existense
-	ValueRegex *string `protobuf:"bytes,2,opt,name=value_regex,json=valueRegex" json:"value_regex,omitempty"`
+	ValueRegex *string `protobuf:"bytes,2,opt,name=value_regex,json=valueRegex" json:"valueRegex,omitempty"`
 }
 func (x *Validator_Header) Reset() {
 	*x = Validator_Header{}
