@@ -211,7 +211,7 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 // use the string input, it's part of the function signature to satisfy
 // Validator interface.
 func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool, error) {
-	res, ok := input.(nethttp.Response)
+	res, ok := input.(*nethttp.Response)
 	if !ok {
 		return false, fmt.Errorf("input %v is not of type http.Response", input)
 	}
