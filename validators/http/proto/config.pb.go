@@ -108,7 +108,9 @@ func (x *Validator) GetBodyRegex() *string {
 }
 func (x *Validator) GetJsonBodySchema() *string {
 	if x != nil  {
-		return x.SuccessJsonBodySchema.ValueRegex
+		if x.SuccessJsonBodySchema!=nil{
+			return x.SuccessJsonBodySchema.ValueRegex
+		}
 	}
 	return nil
 }
