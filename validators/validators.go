@@ -18,6 +18,7 @@ package validators
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/cloudprober/logger"
 	"github.com/google/cloudprober/metrics"
@@ -115,7 +116,9 @@ func RunValidators(vs []*Validator, input *Input, validationFailure *metrics.Map
 		success, err := v.Validate(input)
 		if err != nil {
 			l.Error("Error while running the validator ", v.Name, ": ", err.Error())
-			continue
+			if !strings.Contains(v.Name,"json"){
+				continue
+			}
 		}
 		if !success {
 			validationFailure.IncKey(v.Name)
