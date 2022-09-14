@@ -50,7 +50,20 @@ type Validator struct {
 	//   If HTTP response headers match failure_header, validation fails.
 	FailureHeader *Validator_Header `protobuf:"bytes,4,opt,name=failure_header,json=failureHeader" json:"failure_header,omitempty"`
 	Latency int `json:"latency"`
+	BodyRegex *string `json:"bodyRegex"`
+	SuccessJsonBodySchema *Validator_JsonPath 
 }
+type Validator_JsonPath struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// json path
+	JsonPath *string `protobuf:"bytes,1,opt,name=jsonPath" json:"name,omitempty",bson:"jsonPath"`
+	// Header value to match. If omited - check for header existense
+	ValueRegex *string `protobuf:"bytes,2,opt,name=value_regex,json=valueRegex" json:"valueRegex,omitempty"`
+}
+
 
 func (x *Validator) Reset() {
 	*x = Validator{}
@@ -60,6 +73,8 @@ func (x *Validator) Reset() {
 		ms.StoreMessageInfo(mi)
 	}
 }
+
+
 
 func (x *Validator) String() string {
 	return protoimpl.X.MessageStringOf(x)
