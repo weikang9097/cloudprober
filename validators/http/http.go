@@ -17,17 +17,18 @@
 package http
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	nethttp "net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/glenn-brown/golang-pkg-pcre/src/pkg/pcre"
 	"github.com/google/cloudprober/logger"
 	configpb "github.com/google/cloudprober/validators/http/proto"
-
-	"github.com/xeipuuv/gojsonschema"
+	"github.com/oliveagle/jsonpath"
 )
 
 // Validator implements a validator for HTTP responses.
@@ -39,7 +40,7 @@ type Validator struct {
 	failureStatusCodeRanges []*numRange
 	successHeaderRegexp     *pcre.Regexp
 	failureHeaderRegexp     *pcre.Regexp
-	jsonBodyRegexp         *pcre.Regexp
+	jsonBodyRegexp          *pcre.Regexp
 }
 
 type numRange struct {
@@ -127,7 +128,7 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 	}
 
 	for _, value := range values {
-		if valueRegexp.MatcherString(value,0).Matches() {
+		if valueRegexp.MatcherString(value, 0).Matches() {
 			return true
 		}
 	}
@@ -135,15 +136,13 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 	return false
 }
 
+func (v *Validator) initBodyValidators(c *configpb.Validator) error {
 
-func (v *Validator) initBodyValidators(c *configpb.Validator) error{
-
-	if c.GetBodyRegex()!=nil{
-		reg:= pcre.MustCompile(*c.GetBodyRegex(), 0)
+	if c.GetBodyRegex() != nil {
+		reg := pcre.MustCompile(*c.GetBodyRegex(), 0)
 		v.jsonBodyRegexp = &reg
 	}
 	return nil
-
 
 }
 func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
@@ -158,7 +157,7 @@ func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
 			return nil, nil
 		}
 		compile := pcre.MustCompile(h.GetValueRegex(), 0)
-		return &compile,nil
+		return &compile, nil
 	}
 
 	var err error
@@ -198,8 +197,8 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 			return err
 		}
 	}
-	if c.GetBodyRegex()!=nil{
-		if err = v.initBodyValidators(c);err!=nil{
+	if c.GetBodyRegex() != nil {
+		if err = v.initBodyValidators(c); err != nil {
 			return err
 		}
 	}
@@ -210,7 +209,7 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 // expects the input to be of the type: *http.Response. Note that it doesn't
 // use the string input, it's part of the function signature to satisfy
 // Validator interface.
-func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool, error) {
+func (v *Validator) Validate(input interface{}, latency int, unused []byte) (bool, error) {
 	res, ok := input.(*nethttp.Response)
 	if !ok {
 		return false, fmt.Errorf("input %v is not of type http.Response", input)
@@ -237,27 +236,46 @@ func (v *Validator) Validate(input interface{}, latency int,unused []byte) (bool
 			return false, nil
 		}
 	}
-	if respLatency:= v.c.GetLatency();respLatency!=0{
-		if respLatency<latency{
-			return false,nil
+	if respLatency := v.c.GetLatency(); respLatency != 0 {
+		if respLatency < latency {
+			return false, nil
 		}
 	}
 
-	if bodyRegex:= v.c.GetBodyRegex();bodyRegex!=nil{
-		if v.jsonBodyRegexp.MatcherString(string(unused),0).Matches(){
-			return true,nil
+	if bodyRegex := v.c.GetBodyRegex(); bodyRegex != nil {
+		if v.jsonBodyRegexp.MatcherString(string(unused), 0).Matches() {
+			return true, nil
 		}
-		return false,nil
+		return false, nil
 	}
-	if jsonBodySchema := v.c.GetJsonBodySchema();jsonBodySchema!=nil{
-		schemaLoader := gojsonschema.NewStringLoader(*jsonBodySchema)
-		data :=gojsonschema.NewStringLoader(string(unused))
-		if validate, err := gojsonschema.Validate(schemaLoader, data);err!=nil{
-			return false, err
-		}else if validate.Valid() {
-			return true,nil
+	//if schema := v.c.GetJsonBodySchema(); schema != nil {
+	//	schemaLoader := gojsonschema.NewStringLoader(*schema)
+	//	data := gojsonschema.NewStringLoader(string(unused))
+	//	if validate, err := gojsonschema.Validate(schemaLoader, data); err != nil {
+	//		return false, err
+	//	} else if validate.Valid() {
+	//		return true, nil
+	//	}
+	//	return false, nil
+	//}
+	if j := v.c.SuccessJsonBodySchema; j != nil {
+		var o interface{}
+		var err error
+		if err = json.Unmarshal(unused, &o); err != nil {
+			return false, fmt.Errorf("无法验证JsonBody: unmarshal failed: %s", err.Error())
 		}
-		return false,nil
+
+		if o, err = jsonpath.JsonPathLookup(o, *j.JsonPath); err != nil {
+			return false, fmt.Errorf("无法验证JsonBody: json path lookup failed: %s", err.Error())
+		}
+
+		s, _ := json.Marshal(o)
+		m, err := regexp.Match(*j.ValueRegex, s)
+		if err != nil {
+			return false, fmt.Errorf("无法验证JsonBody: regex match failed: %s", err.Error())
+		}
+		return m, nil
+
 	}
 	return true, nil
 }
