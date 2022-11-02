@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/dlclark/regexp2"
 	nethttp "net/http"
 	"regexp"
 	"strconv"
@@ -38,9 +39,11 @@ type Validator struct {
 
 	successStatusCodeRanges []*numRange
 	failureStatusCodeRanges []*numRange
-	successHeaderRegexp     *pcre.Regexp
-	failureHeaderRegexp     *pcre.Regexp
-	jsonBodyRegexp          *pcre.Regexp
+	successHeaderRegexp     *regexp2.Regexp
+	failureHeaderRegexp     *regexp2.Regexp
+
+	bodyRegexp     *regexp2.Regexp
+	jsonBodyRegexp *regexp2.Regexp
 }
 
 type numRange struct {
@@ -137,14 +140,33 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 }
 
 func (v *Validator) initBodyValidators(c *configpb.Validator) error {
-
-	if c.GetBodyRegex() != nil {
-		reg := pcre.MustCompile(*c.GetBodyRegex(), 0)
-		v.jsonBodyRegexp = &reg
+	schema := c.GetBodySchema()
+	if len(schema) > 0 {
+		var p *regexp2.Regexp
+		var err error
+		if p, err = regexp2.Compile(schema, regexp2.Multiline); err != nil {
+			return fmt.Errorf("BodySchema regex compiling failed: %s", err.Error())
+		}
+		v.bodyRegexp = p
 	}
 	return nil
-
 }
+
+func (v *Validator) initJsonBodyValidators(c *configpb.Validator) error {
+	if schema := c.GetJsonBodySchema(); schema != nil {
+		jp, err := jsonpath.Compile(schema.GetJsonPath())
+		if err != nil {
+		}
+
+		var p *regexp2.Regexp
+		if p, err = regexp2.Compile(schema.GetValueRegex(), regexp2.Multiline); err != nil {
+			return fmt.Errorf("JsonBodySchema regex compiling failed: %s", err.Error())
+		}
+		v.bodyRegexp = p
+	}
+	return nil
+}
+
 func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
 	parseHeader := func(h *configpb.Validator_Header) (*pcre.Regexp, error) {
 		if h == nil {
@@ -197,7 +219,8 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 			return err
 		}
 	}
-	if c.GetBodyRegex() != nil {
+
+	if c.GetBodySchema() != nil {
 		if err = v.initBodyValidators(c); err != nil {
 			return err
 		}
@@ -236,28 +259,20 @@ func (v *Validator) Validate(input interface{}, latency int, unused []byte) (boo
 			return false, nil
 		}
 	}
+
 	if respLatency := v.c.GetLatency(); respLatency != 0 {
 		if respLatency < latency {
 			return false, nil
 		}
 	}
 
-	if bodyRegex := v.c.GetBodyRegex(); bodyRegex != nil {
+	if bodyRegex := v.c.GetBodySchema(); bodyRegex != nil {
 		if v.jsonBodyRegexp.MatcherString(string(unused), 0).Matches() {
 			return true, nil
 		}
 		return false, nil
 	}
-	//if schema := v.c.GetJsonBodySchema(); schema != nil {
-	//	schemaLoader := gojsonschema.NewStringLoader(*schema)
-	//	data := gojsonschema.NewStringLoader(string(unused))
-	//	if validate, err := gojsonschema.Validate(schemaLoader, data); err != nil {
-	//		return false, err
-	//	} else if validate.Valid() {
-	//		return true, nil
-	//	}
-	//	return false, nil
-	//}
+
 	if j := v.c.SuccessJsonBodySchema; j != nil {
 		var o interface{}
 		var err error
@@ -275,7 +290,6 @@ func (v *Validator) Validate(input interface{}, latency int, unused []byte) (boo
 			return false, fmt.Errorf("无法验证JsonBody: regex match failed: %s", err.Error())
 		}
 		return m, nil
-
 	}
 	return true, nil
 }

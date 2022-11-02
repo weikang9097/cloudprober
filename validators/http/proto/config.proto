@@ -39,6 +39,17 @@ message Validator {
   //   If HTTP response headers match failure_header, validation fails.
   optional Header failure_header = 4;
 
-  optional int latency = 5;
+  optional int32 latency = 5;
+
+  optional string BodySchema = 6;
+
+  message JsonBody {
+    // Json path to look for
+    optional string json_path = 1;
+    // Header value to match. If omited - check for header existense
+    optional string value_regex = 2;
+  }
+
+  optional JsonBody json_body_schema = 7;
 
 }
