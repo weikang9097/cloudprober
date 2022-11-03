@@ -22,11 +22,9 @@ import (
 	"fmt"
 	"github.com/dlclark/regexp2"
 	nethttp "net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/glenn-brown/golang-pkg-pcre/src/pkg/pcre"
 	"github.com/google/cloudprober/logger"
 	configpb "github.com/google/cloudprober/validators/http/proto"
 	"github.com/oliveagle/jsonpath"
@@ -42,7 +40,9 @@ type Validator struct {
 	successHeaderRegexp     *regexp2.Regexp
 	failureHeaderRegexp     *regexp2.Regexp
 
+	latency        int
 	bodyRegexp     *regexp2.Regexp
+	jsonPath       *jsonpath.Compiled
 	jsonBodyRegexp *regexp2.Regexp
 }
 
@@ -119,7 +119,7 @@ func lookupStatusCode(statusCode int, statusCodeRanges []*numRange) bool {
 // lookupHTTPHeader looks up for the given header in the HTTP response. It
 // returns true on the first match. If valueRegex is omitted - check for header
 // existence only.
-func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp *pcre.Regexp) bool {
+func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp *regexp2.Regexp) bool {
 	values, found := headers[expectedHeader]
 	if !found {
 		return false
@@ -131,7 +131,8 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 	}
 
 	for _, value := range values {
-		if valueRegexp.MatcherString(value, 0).Matches() {
+		m, _ := valueRegexp.MatchString(value)
+		if m {
 			return true
 		}
 	}
@@ -142,33 +143,32 @@ func lookupHTTPHeader(headers nethttp.Header, expectedHeader string, valueRegexp
 func (v *Validator) initBodyValidators(c *configpb.Validator) error {
 	schema := c.GetBodySchema()
 	if len(schema) > 0 {
-		var p *regexp2.Regexp
 		var err error
-		if p, err = regexp2.Compile(schema, regexp2.Multiline); err != nil {
+		if v.bodyRegexp, err = regexp2.Compile(schema, regexp2.Multiline); err != nil {
 			return fmt.Errorf("BodySchema regex compiling failed: %s", err.Error())
 		}
-		v.bodyRegexp = p
 	}
 	return nil
 }
 
 func (v *Validator) initJsonBodyValidators(c *configpb.Validator) error {
+
 	if schema := c.GetJsonBodySchema(); schema != nil {
-		jp, err := jsonpath.Compile(schema.GetJsonPath())
+		var err error
+		v.jsonPath, err = jsonpath.Compile(schema.GetJsonPath())
 		if err != nil {
+			return fmt.Errorf("JsonPath compiling failed: %s", err.Error())
 		}
 
-		var p *regexp2.Regexp
-		if p, err = regexp2.Compile(schema.GetValueRegex(), regexp2.Multiline); err != nil {
+		if v.jsonBodyRegexp, err = regexp2.Compile(schema.GetValueRegex(), regexp2.Multiline); err != nil {
 			return fmt.Errorf("JsonBodySchema regex compiling failed: %s", err.Error())
 		}
-		v.bodyRegexp = p
 	}
 	return nil
 }
 
 func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
-	parseHeader := func(h *configpb.Validator_Header) (*pcre.Regexp, error) {
+	parseHeader := func(h *configpb.Validator_Header) (*regexp2.Regexp, error) {
 		if h == nil {
 			return nil, nil
 		}
@@ -178,8 +178,11 @@ func (v *Validator) initHeaderValidators(c *configpb.Validator) error {
 		if h.GetValueRegex() == "" {
 			return nil, nil
 		}
-		compile := pcre.MustCompile(h.GetValueRegex(), 0)
-		return &compile, nil
+		compile, err := regexp2.Compile(h.GetValueRegex(), regexp2.None)
+		if err != nil {
+			return nil, fmt.Errorf("header regex compiling failed: %s", err.Error())
+		}
+		return compile, nil
 	}
 
 	var err error
@@ -220,11 +223,22 @@ func (v *Validator) Init(config interface{}, l *logger.Logger) error {
 		}
 	}
 
-	if c.GetBodySchema() != nil {
+	if c.GetLatency() > 0 {
+		v.latency = int(c.GetLatency())
+	}
+
+	if len(c.GetBodySchema()) > 0 {
 		if err = v.initBodyValidators(c); err != nil {
 			return err
 		}
 	}
+
+	if c.GetJsonBodySchema() != nil {
+		if err = v.initJsonBodyValidators(c); err != nil {
+			return err
+		}
+	}
+
 	return v.initHeaderValidators(c)
 }
 
@@ -260,32 +274,36 @@ func (v *Validator) Validate(input interface{}, latency int, unused []byte) (boo
 		}
 	}
 
-	if respLatency := v.c.GetLatency(); respLatency != 0 {
-		if respLatency < latency {
+	if v.latency > 0 {
+		if latency <= v.latency {
 			return false, nil
 		}
 	}
 
-	if bodyRegex := v.c.GetBodySchema(); bodyRegex != nil {
-		if v.jsonBodyRegexp.MatcherString(string(unused), 0).Matches() {
-			return true, nil
+	if v.bodyRegexp != nil {
+		m, err := v.bodyRegexp.MatchString(string(unused))
+		if err != nil {
+			return false, fmt.Errorf("match reponse body failed: %s", err.Error())
 		}
-		return false, nil
+		return m, nil
 	}
 
-	if j := v.c.SuccessJsonBodySchema; j != nil {
+	if v.jsonPath != nil {
 		var o interface{}
 		var err error
 		if err = json.Unmarshal(unused, &o); err != nil {
 			return false, fmt.Errorf("无法验证JsonBody: unmarshal failed: %s", err.Error())
 		}
 
-		if o, err = jsonpath.JsonPathLookup(o, *j.JsonPath); err != nil {
+		if o, err = v.jsonPath.Lookup(o); err != nil {
+			if strings.Contains(err.Error(), "key error:") {
+				return false, nil
+			}
 			return false, fmt.Errorf("无法验证JsonBody: json path lookup failed: %s", err.Error())
 		}
 
 		s, _ := json.Marshal(o)
-		m, err := regexp.Match(*j.ValueRegex, s)
+		m, err := v.jsonBodyRegexp.MatchString(string(s))
 		if err != nil {
 			return false, fmt.Errorf("无法验证JsonBody: regex match failed: %s", err.Error())
 		}

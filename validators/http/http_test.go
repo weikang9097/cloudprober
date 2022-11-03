@@ -16,9 +16,9 @@ package http
 
 import (
 	"fmt"
+	"github.com/dlclark/regexp2"
 	"net/http"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
@@ -108,12 +108,12 @@ func TestLookupHTTPHeader(t *testing.T) {
 		t.Errorf("lookupHTTPHeader(&%T%+v, %v, %v): false expected: true", headers, headers, header, nil)
 	}
 
-	r := regexp.MustCompile("badl[ya]")
+	r := regexp2.MustCompile("badl[ya]", regexp2.None)
 	if lookupHTTPHeader(headers, header, r) != false {
 		t.Errorf("lookupHTTPHeader(&%T%+v, %v, %v): true expected: false", headers, headers, header, r)
 	}
 
-	r = regexp.MustCompile("tr[ul]ly")
+	r = regexp2.MustCompile("tr[ul]ly", regexp2.None)
 	if lookupHTTPHeader(headers, header, r) != true {
 		t.Errorf("lookupHTTPHeader(&%T%+v, %v, %v): false expected: true", headers, headers, header, r)
 	}
@@ -137,7 +137,7 @@ func TestValidateStatusCode(t *testing.T) {
 		res := &http.Response{
 			StatusCode: code,
 		}
-		result, _ := v.Validate(res, nil)
+		result, _ := v.Validate(res, 500, nil)
 		if result != expected {
 			t.Errorf("v.Validate(&http.Response{StatusCode: %d}, nil): %v, expected: %v", code, result, expected)
 		}
@@ -148,7 +148,7 @@ func TestValidateStatusCode(t *testing.T) {
 		res := &http.Response{
 			StatusCode: code,
 		}
-		result, _ := v.Validate(res, nil)
+		result, _ := v.Validate(res, 500, nil)
 		if result != expected {
 			t.Errorf("v.Validate(&http.Response{StatusCode: %d}, nil): %v, expected: %v", code, result, expected)
 		}
@@ -252,7 +252,7 @@ func TestValidateHeaders(t *testing.T) {
 				Header:     respHeader,
 				StatusCode: respStatus,
 			}
-			ok, err := v.Validate(resp, nil)
+			ok, err := v.Validate(resp, 500, nil)
 
 			if err != nil {
 				t.Errorf("Error running validate (resp: %v): %v", resp, err)
