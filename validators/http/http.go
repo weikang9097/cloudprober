@@ -275,7 +275,7 @@ func (v *Validator) Validate(input interface{}, latency int, unused []byte) (boo
 	}
 
 	if v.latency > 0 {
-		if latency <= v.latency {
+		if latency > v.latency {
 			return false, nil
 		}
 	}
