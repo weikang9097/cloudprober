@@ -52,13 +52,13 @@ type EventMetrics struct {
 	labels     map[string]string
 	labelsKeys []string
 
-	LatencyUnit        time.Duration
-	Response           *http.Response
+	LatencyUnit       time.Duration
+	Response          *http.Response
+	RequestFailReason string
+
 	FailValidatorNames []string
-	Latency int
-	ResponseBody  string
-
-
+	Latency            int
+	ResponseBody       string
 }
 
 // NewEventMetrics return a new EventMetrics object with internals maps initialized.

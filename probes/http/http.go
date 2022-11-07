@@ -104,16 +104,15 @@ type probeResult struct {
 	response                 *http.Response
 	respLatency              int
 	failValidatorNames       []string
-	responseBody   string
-	tlsHandshakeElapsed int64
-	dnsElapsed int64
-	connectElapsed int64
-	firstByteElapsed int64
-	ValidatorSuccess bool
-	ValidatorFail bool
-	TimeOutOrError bool
-	Reason string
-
+	responseBody             string
+	requestFailReason        string
+	tlsHandshakeElapsed      int64
+	dnsElapsed               int64
+	connectElapsed           int64
+	firstByteElapsed         int64
+	ValidatorSuccess         bool
+	ValidatorFail            bool
+	TimeOutOrError           bool
 }
 
 func (p *Probe) updateOauthToken() {
@@ -159,14 +158,7 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	}
 
 	p.requestBody = []byte(p.c.GetBody())
-	var resolver *net.Resolver
-    if opts.DnsServer!=""{
-    	resolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{}
-			address = opts.DnsServer
-			return d.DialContext(ctx, network, address)
-		}}
-	}
+
 	// Create a transport for our use. This is mostly based on
 	// http.DefaultTransport with some timeouts changed.
 	// TODO(manugarg): Considering cloning DefaultTransport once
@@ -174,7 +166,15 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 	dialer := &net.Dialer{
 		Timeout:   p.opts.Timeout,
 		KeepAlive: 30 * time.Second, // TCP keep-alive
-		Resolver: resolver,
+	}
+
+	if len(opts.DnsServer) > 0 {
+		dialer.Resolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "tcp", opts.DnsServer)
+			},
+		}
 	}
 
 	if p.opts.SourceIP != nil {
@@ -244,13 +244,13 @@ func (p *Probe) Init(name string, opts *options.Options) error {
 
 	// Clients are safe for concurrent use by multiple goroutines.
 	var checkRedirectFunc func(req *http.Request, via []*http.Request) error
-	if opts.IgnoreRedirect{
+	if opts.IgnoreRedirect {
 		checkRedirectFunc = func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
 	}
 	p.client = &http.Client{
-		Transport: transport,
+		Transport:     transport,
 		CheckRedirect: checkRedirectFunc,
 	}
 	p.statsExportFrequency = p.opts.StatsExportInterval.Nanoseconds() / p.opts.Interval.Nanoseconds()
@@ -290,14 +290,14 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 		req.Body = ioutil.NopCloser(bytes.NewReader(p.requestBody))
 	}
 	var start, connect, dns, tlsHandshake time.Time
-	var  dnsElapsed,connectElapsed,firstBytesElapsed,tlsHandshakeElapsed int64
+	var dnsElapsed, connectElapsed, firstBytesElapsed, tlsHandshakeElapsed int64
 	if p.c.GetKeepAlive() {
 		trace := &httptrace.ClientTrace{
 			DNSStart: func(dsi httptrace.DNSStartInfo) {
 				dns = time.Now()
 			},
 			DNSDone: func(ddi httptrace.DNSDoneInfo) {
-				dnsElapsed =  time.Since(dns).Milliseconds()
+				dnsElapsed = time.Since(dns).Milliseconds()
 			},
 			ConnectStart: func(network, addr string) {
 				connect = time.Now()
@@ -325,12 +325,12 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	start = time.Now()
 	resp, err := p.client.Do(req)
 	latency := time.Since(start)
-    result.respLatency = int(latency.Milliseconds())
-    result.firstByteElapsed = firstBytesElapsed
-    result.connectElapsed = connectElapsed
-    result.dnsElapsed = dnsElapsed
-    result.tlsHandshakeElapsed = tlsHandshakeElapsed
-    result.response = resp
+	result.respLatency = int(latency.Milliseconds())
+	result.firstByteElapsed = firstBytesElapsed
+	result.connectElapsed = connectElapsed
+	result.dnsElapsed = dnsElapsed
+	result.tlsHandshakeElapsed = tlsHandshakeElapsed
+	result.response = resp
 	if resultMu != nil {
 		// Note that we take lock on result object outside of the actual request.
 		resultMu.Lock()
@@ -340,13 +340,15 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	result.total++
 
 	if err != nil {
-		result.TimeOutOrError =true
+		result.TimeOutOrError = true
 		if isClientTimeout(err) {
 			p.l.Warning("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: timeout error: ", err.Error())
+			result.requestFailReason = fmt.Sprintf("timeout err: %s", err.Error())
 			result.timeouts++
 			return
 		}
 		p.l.Warning("Target:", targetName, ", URL:", req.URL.String(), ", http.doHTTPRequest: ", err.Error())
+		result.requestFailReason = err.Error()
 		return
 	}
 
@@ -363,7 +365,7 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 	result.respCodes.IncKey(strconv.FormatInt(int64(resp.StatusCode), 10))
 
 	if p.opts.Validators != nil {
-		failedValidations := validators.RunValidators(p.opts.Validators, &validators.Input{Response: resp, ResponseBody: respBody,Latency: int(latency.Milliseconds())}, result.validationFailure, p.l)
+		failedValidations := validators.RunValidators(p.opts.Validators, &validators.Input{Response: resp, ResponseBody: respBody, Latency: int(latency.Milliseconds())}, result.validationFailure, p.l)
 		result.failValidatorNames = failedValidations
 		// If any validation failed, return now, leaving the success and latency
 		// counters unchanged.
@@ -373,13 +375,12 @@ func (p *Probe) doHTTPRequest(req *http.Request, targetName string, result *prob
 			return
 		}
 	}
-	result.ValidatorSuccess  = true
+	result.ValidatorSuccess = true
 	result.success++
 	result.latency.AddFloat64(latency.Seconds() / p.opts.LatencyUnit.Seconds())
 	if result.respBodies != nil && len(respBody) <= maxResponseSizeForMetrics {
 		result.respBodies.IncKey(string(respBody))
 	}
-
 }
 
 func (p *Probe) runProbe(ctx context.Context, target endpoint.Endpoint, req *http.Request, result *probeResult) {
@@ -436,10 +437,10 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 		AddMetric("success", metrics.NewInt(result.success)).
 		AddMetric(p.opts.LatencyMetricName, result.latency).
 		AddMetric("timeouts", metrics.NewInt(result.timeouts)).
-		AddMetric("dns_elapsed",metrics.NewInt(result.dnsElapsed)).
-		AddMetric("connect_elapsed",metrics.NewInt(result.connectElapsed)).
-		AddMetric("tls_elapsed",metrics.NewInt(result.tlsHandshakeElapsed)).
-		AddMetric("first_byte_elapsed",metrics.NewInt(result.firstByteElapsed)).
+		AddMetric("dns_elapsed", metrics.NewInt(result.dnsElapsed)).
+		AddMetric("connect_elapsed", metrics.NewInt(result.connectElapsed)).
+		AddMetric("tls_elapsed", metrics.NewInt(result.tlsHandshakeElapsed)).
+		AddMetric("first_byte_elapsed", metrics.NewInt(result.firstByteElapsed)).
 		AddMetric("resp-code", result.respCodes).
 		AddLabel("ptype", "http").
 		AddLabel("probe", p.name).
@@ -448,19 +449,20 @@ func (p *Probe) exportMetrics(ts time.Time, result *probeResult, targetName stri
 	em.Response = result.response
 	em.Latency = result.respLatency
 	em.ResponseBody = result.responseBody
+	em.RequestFailReason = result.requestFailReason
 	if result.respBodies != nil {
 		em.AddMetric("resp-body", result.respBodies)
 	}
-    if result.ValidatorSuccess{
-    	em.AddMetric("probe_status",metrics.NewInt(0))
-    	result.ValidatorSuccess =false
+	if result.ValidatorSuccess {
+		em.AddMetric("probe_status", metrics.NewInt(0))
+		result.ValidatorSuccess = false
 	}
-	if result.ValidatorFail{
-        em.AddMetric("probe_status",metrics.NewInt(1))
-        result.ValidatorFail = false
+	if result.ValidatorFail {
+		em.AddMetric("probe_status", metrics.NewInt(1))
+		result.ValidatorFail = false
 	}
-	if result.TimeOutOrError{
-		em.AddMetric("probe_status",metrics.NewInt(2))
+	if result.TimeOutOrError {
+		em.AddMetric("probe_status", metrics.NewInt(2))
 		result.TimeOutOrError = false
 	}
 	if p.c.GetKeepAlive() {
@@ -496,7 +498,7 @@ func (p *Probe) startForTarget(ctx context.Context, target endpoint.Endpoint, da
 	ticker := time.NewTicker(p.opts.Interval)
 	defer ticker.Stop()
 
-	for ts := time.Now(); true; ts = <-ticker.C{
+	for ts := time.Now(); true; ts = <-ticker.C {
 		// Don't run another probe if context is canceled already.
 		if ctxDone(ctx) {
 			return
